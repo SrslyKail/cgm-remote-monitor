@@ -1,4 +1,4 @@
-version: '3'
+version: '3.9'
 
 x-logging:
   &default-logging
@@ -8,81 +8,120 @@ x-logging:
   driver: json-file
 
 services:
-  mongo:
-    image: mongo:4.4
-    restart: always
-    volumes:
-      - ${NS_MONGO_DATA_DIR:-./mongo-data}:/data/db:cached
-    logging: *default-logging
-
   nightscout:
     image: nightscout/cgm-remote-monitor:latest
-    container_name: nightscout
-    restart: always
+    environment:
+# -----------------------------------------------------------------------------------------------
+# Here are your Nightscout variables:
+# Respect the format VARIABLE: value (with a space after :)
+#
+# Mandatory information
+      TZ: ${TZ:-"YOUR_TIMEZONE"}
+      API_SECRET: ${API_SECRET:-"YOUR_API_SECRET"}
+      ENABLE: ${ENABL0:-"careportal sage iage cage iob cob basal upbat devicestatus dbsize cors"}
+      SHOW_PLUGINS: ${SHOW_PLUGINS:-"careportal sage iob cob dbsize cors ar2"}
+      DISPLAY_UNITS: ${DISPLAY_UNITS:-"mg/dl"}
+
+      #BRIDGE_USER_NAME: username
+      #BRIDGE_PASSWORD: password
+      #BRIDGE_SERVER: EU
+
+      AUTH_DEFAULT_ROLES: ${AUTH_DEFAULT_ROLES:-"readable"}
+      NIGHT_MODE: ${NIGHT_MODE:-"off"}
+      THEME: ${THEME:-"colors"}
+      TIME_FORMAT: ${TIME_FORMAT:-24}
+      SCALE_Y: ${SCALE_Y:-"linear"}
+      AR2_CONE_FACTOR: ${AR2_CONE_FACTOR}
+      SHOW_RAWBG: ${SHOW_RAWBG}
+      DBSIZE_MAX: ${DBSIZE_MAX}
+      #BASAL_RENDER: default
+      BOLUS_RENDER_FORMAT_SMALL: ${BOLUS_RENDER_FORMAT_SMALL}
+      BOLUS_RENDER_OVER: ${BOLUS_RENDER_OVER}
+
+      BG_LOW: ${BG_LOW}
+      BG_TARGET_BOTTOM: ${BG_TARGET_BOTTOM}
+      BG_TARGET_TOP: ${BG_TARGET_TOP}
+      BG_HIGH: ${BG_HIGH}
+      ALARM_TYPES: ${ALARM_TYPES}
+      ALARM_HIGH: ${ALARM_HIGH}
+      ALARM_LOW: ${ALARM_LOW}
+      ALARM_URGENT_HIGH: ${ALARM_URGENT_HIGH}
+      ALARM_URGENT_LOW: ${ALARM_URGENT_LOW}
+      ALARM_TIMEAGO_URGENT: ${ALARM_TIMEAGO_URGENT}
+      ALARM_TIMEAGO_URGENT_MINS: ${ALARM_TIMEAGO_URGENT_MINS}
+      ALARM_TIMEAGO_WARN: ${ALARM_TIMEAGO_WARN}
+      ALARM_TIMEAGO_WARN_MINS: ${ALARM_TIMEAGO_WARN_MINS}
+
+      DEVICESTATUS_ADVANCED: ${DEVICESTATUS_ADVANCED}
+      SAGE_INFO: ${SAGE_INFO}
+      SAGE_URGENT: ${SAGE_URGENT}
+      SAGE_WARN: ${SAGE_WARN}
+      #SHOW_FORECAST:
+      #PUMP_FIELDS: reservoir battery clock status
+      #PUMP_RETRO_FIELDS: battery reservoir clock status
+      #PUMP_URGENT_BATT: 26
+      #PUMP_WARN_BATT: 51
+      #IAGE_INFO: 68
+      #IAGE_URGENT: 79
+      #IAGE_WARN: 72
+      #PUMP_ENABLE_ALERTS: true
+      #PUMP_URGENT_BATT_U: 30
+      #PUMP_URGENT_BATT_V: 1.25
+      #PUMP_URGENT_RES: 10
+      #PUMP_URGENT_CLOCK: 30
+      #LOOP_ENABLE_ALERTS: true
+      #LOOP_WARN: 20
+      #LOOP_URGENT: 60
+# -----------------------------------------------------------------------------------------------
+# Do not change anything below unless you know what you are doing
+# -----------------------------------------------------------------------------------------------
+      INSECURE_USE_HTTP: 'true'
+      MONGO_CONNECTION: mongodb://mongo:27017/Nightscout
+    ports:
+      - "1337:1337"
     depends_on:
       - mongo
     labels:
       - 'traefik.enable=true'
       # Change the below Host from `localhost` to be the web address where Nightscout is running.
       # Also change the email address in the `traefik` service below.
-      - 'traefik.http.routers.nightscout.rule=Host(`localhost`)'
+      - 'traefik.http.routers.nightscout.rule=Host(`ns.coreybuchan.com`)'
       - 'traefik.http.routers.nightscout.entrypoints=websecure'
       - 'traefik.http.routers.nightscout.tls.certresolver=le'
+    volumes:
+      - /nightscout/docker:/var/opt/ssl/:ro
+    restart: unless-stopped
+
+  mongo:
+# Note you can also use mongo:5
+    image: mongo:4.4
+    container_name: mongo
+    volumes:
+      - ./data:/data/db
+# Enable only of you want external access, but then you should modify mongo login and passord
+    #ports:
+      #- "27017:27017"
     logging: *default-logging
-    environment:
-      ### Variables for the container
-      NODE_ENV: production
-      TZ: Etc/UTC
-
-      ### Overridden variables for Docker Compose setup
-      # The `nightscout` service can use HTTP, because we use `traefik` to serve the HTTPS
-      # and manage TLS certificates
-      INSECURE_USE_HTTP: 'true'
-
-      # For all other settings, please refer to the Environment section of the README
-      ### Required variables
-      # MONGO_CONNECTION - The connection string for your Mongo database.
-      # Something like mongodb://sally:sallypass@ds099999.mongolab.com:99999/nightscout
-      # The default connects to the `mongo` included in this docker-compose file.
-      # If you change it, you probably also want to comment out the entire `mongo` service block
-      # and `depends_on` block above.
-      MONGO_CONNECTION: mongodb://mongo:27017/nightscout
-
-      # API_SECRET - A secret passphrase that must be at least 12 characters long.
-      API_SECRET: change_me
-
-      ### Features
-      # ENABLE - Used to enable optional features, expects a space delimited list, such as: careportal rawbg iob
-      # See https://github.com/nightscout/cgm-remote-monitor#plugins for details
-      ENABLE: careportal rawbg iob
-
-      # AUTH_DEFAULT_ROLES (readable) - possible values readable, denied, or any valid role name.
-      # When readable, anyone can view Nightscout without a token. Setting it to denied will require
-      # a token from every visit, using status-only will enable api-secret based login.
-      AUTH_DEFAULT_ROLES: denied
-
-      # For all other settings, please refer to the Environment section of the README
-      # https://github.com/nightscout/cgm-remote-monitor#environment
+    restart: unless-stopped
 
   traefik:
     image: traefik:latest
-    restart: always
     container_name: 'traefik'
     command:
       - '--providers.docker=true'
       - '--providers.docker.exposedbydefault=false'
-      - '--entrypoints.web.address=:80'
+      - '--entrypoints.web.address=:${HTTP_PORT}'
       - '--entrypoints.web.http.redirections.entrypoint.to=websecure'
-      - '--entrypoints.websecure.address=:443'
+      - '--entrypoints.websecure.address=:${HTTPS_PORT}'
       - "--certificatesresolvers.le.acme.httpchallenge=true"
       - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
       - '--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json'
       # Change the below to match your email address
-      - '--certificatesresolvers.le.acme.email=example@example.com'
+      - '--certificatesresolvers.le.acme.email=xouwan021592@gmail.com'
     ports:
       - '443:443'
       - '80:80'
     volumes:
       - './letsencrypt:/letsencrypt'
-      - '/var/run/docker.sock:/var/run/docker.sock:ro'
-    logging: *default-logging
+      - '/var/run/docker.sock:/var/run/docker.sock:ro' 
+    restart: unless-stopped
